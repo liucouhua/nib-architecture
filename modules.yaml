@@ -1,0 +1,436 @@
+# NiB module roster. Source of truth for ids, role, status, owners.
+#
+# role:
+#   interface      — write the contract others implement. Changing this
+#                    touches every package.
+#   implementation — one dataset or one model that implements the interface.
+#                    SEVIR is an example, not the data layer itself.
+#   platform       — runtime plumbing (mounts, process, UI).
+
+version: 1
+
+modules:
+  - id: A1
+    workstream: contracts
+    role: interface
+    name: Task profiles
+    purpose: Name and version the sample a model family consumes. Today only precip-nowcast.v1.
+    do:
+      - Write the precip-nowcast.v1 field list (variable, layout, time, missing).
+      - Versioning rule for a later second profile.
+    done_when: A new data implementation can declare offers without asking this owner to decode files.
+    does_not_own:
+      - Native file decoding
+      - Model normalisation
+    depends_on: [A3]
+    status: design
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "A second profile needs a revised RFC."
+
+  - id: A2
+    workstream: contracts
+    role: interface
+    name: Matcher
+    purpose: Decide if a data implementation may pair with a model implementation. No array conversion.
+    do:
+      - Check offers ∩ requires, then shape / cadence / frame counts.
+      - Return hard errors and warnings the UI can show.
+    done_when: Incompatible pairs never reach the runner; the reason is readable.
+    does_not_own:
+      - Loading data
+      - Running models
+    depends_on: [A1, A3]
+    status: design
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "Upgrade of prototype/utils/validation.py."
+
+  - id: A3
+    workstream: contracts
+    role: interface
+    name: Shared contracts
+    purpose: IO-free types, Protocols, manifest parse. Both adapter interfaces import this.
+    do:
+      - Keep FieldSpec / DataContract / ModelContract / TaskSample here.
+      - Manifest JSON round-trip.
+    done_when: Data and model implementations depend only on this package plus their own files.
+    does_not_own:
+      - FastAPI
+      - Docker
+      - Normalisation
+    depends_on: []
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "CanonicalSample becomes TaskSample in a later code change."
+
+  - id: B1
+    workstream: data
+    role: interface
+    name: Data adapter interface
+    purpose: The generic Source Adapter others implement. This is the data-side contract job.
+    do:
+      - DataAdapter Protocol (list_samples, load_sample, offers, close).
+      - Manifest schema for offers and fields.
+      - Loader + tests that a fake implementation must pass.
+    done_when: A new dataset ships as datas/PACKAGE_ID/ without editing B1.
+    does_not_own:
+      - SEVIR HDF5 details
+      - Any specific radar / satellite / lightning format
+    depends_on: [A3]
+    status: design
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "Interface owner. Dataset people implement B1; they do not extend B1's code."
+
+  - id: B3
+    workstream: data
+    role: platform
+    name: Data catalog mount
+    purpose: One read-only NIB_DATA_ROOT. Package-relative paths. Observations stay on the host.
+    do:
+      - Document catalog layout and env NIB_DATA_ROOT.
+      - Fail with the missing path before a run starts.
+    done_when: Several data implementations coexist under one mount.
+    does_not_own:
+      - Decoding
+    depends_on: []
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "See prototype/docs/runtime-data-catalog.md."
+
+  - id: B2
+    workstream: data
+    role: implementation
+    name: SEVIR VIL
+    purpose: Example data implementation. One dataset, not the data layer.
+    do:
+      - datas/SEVIR/adapter.py + manifest.json implementing B1.
+      - Offer precip-nowcast.v1 from the HDF5 cubes.
+    done_when: Matcher accepts SEVIR with current models; tests cover list/load/offers.
+    does_not_own:
+      - Other datasets
+      - The DataAdapter Protocol
+    depends_on: [B1, B3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "Reference instance. Same job as B4–B6, different files."
+
+  - id: B4
+    workstream: data
+    role: implementation
+    name: Local radar
+    purpose: Another data implementation (ODIM_H5 / national composite). Same job as SEVIR.
+    do:
+      - datas/PACKAGE_ID implementing B1 for this format.
+      - Offer precip-nowcast.v1 if this source can project to it.
+    done_when: Pairing works through Matcher with no B1 code change.
+    does_not_own:
+      - New task profiles
+      - Matcher
+    depends_on: [B1, B3]
+    status: planned
+    mvp: false
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: B5
+    workstream: data
+    role: implementation
+    name: Satellite
+    purpose: Data implementation for geostationary / derived satellite fields. Same job as SEVIR.
+    do:
+      - datas/PACKAGE_ID implementing B1.
+      - Optional projection onto precip-nowcast.v1 (sat-to-radar lives in this package if needed).
+    done_when: Manifest offers are honest; current models pair only if v1 is offered.
+    does_not_own:
+      - A platform translator layer
+    depends_on: [B1, B3]
+    status: planned
+    mvp: false
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: B6
+    workstream: data
+    role: implementation
+    name: Lightning
+    purpose: Data implementation for lightning observations. Same job as SEVIR.
+    do:
+      - datas/PACKAGE_ID implementing B1.
+    done_when: Package loads and declares offers. No pair with precip models unless it offers v1.
+    does_not_own:
+      - A lightning task profile
+    depends_on: [B1, B3]
+    status: planned
+    mvp: false
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: C1
+    workstream: models
+    role: interface
+    name: Model adapter interface
+    purpose: The generic Model Adapter others implement. This is the model-side contract job.
+    do:
+      - ModelAdapter Protocol (predict(TaskSample), contract property).
+      - Manifest schema for requires, input, output, context_frames.
+      - Tests that a fake model implementation must pass.
+    done_when: A new model ships as models/PACKAGE_ID/ without editing C1.
+    does_not_own:
+      - Native file I/O
+      - A specific network's normalisation
+    depends_on: [A3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: "Interface owner. Model authors implement C1; they do not extend C1's code."
+
+  - id: C2
+    workstream: models
+    role: implementation
+    name: WADEPre
+    purpose: One model implementation. Owns 6-to-5 latest-frame pick and ONNX prep.
+    do:
+      - models/WADEPre/adapter.py + manifest + ONNX.
+      - requires precip-nowcast.v1.
+    done_when: predict() matches the contract; invalid samples are rejected.
+    does_not_own:
+      - Other models' normalisation
+      - The ModelAdapter Protocol
+    depends_on: [C1]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: C3
+    workstream: models
+    role: implementation
+    name: NowcastNet
+    purpose: One model implementation of C1.
+    do:
+      - models/NowcastNet/adapter.py + manifest + artifact.
+    done_when: Same bar as C2.
+    does_not_own:
+      - Other models' normalisation
+    depends_on: [C1]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: C4
+    workstream: models
+    role: implementation
+    name: SimVP
+    purpose: One model implementation of C1.
+    do:
+      - models/SimVP/adapter.py + manifest + artifact.
+    done_when: Same bar as C2.
+    does_not_own:
+      - Other models' normalisation
+    depends_on: [C1]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: C5
+    workstream: models
+    role: implementation
+    name: exPreCast
+    purpose: One model implementation of C1.
+    do:
+      - models/exPreCast/adapter.py + manifest + artifact.
+    done_when: Same bar as C2.
+    does_not_own:
+      - Other models' normalisation
+    depends_on: [C1]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: D1
+    workstream: products
+    role: platform
+    name: Evaluation
+    purpose: Metrics from saved prediction and truth. Thresholds change without rerunning inference.
+    do:
+      - Metric functions (CSI family, per-frame).
+      - Read arrays from the result directory, never from RAM-only state.
+    done_when: Changing a CSI threshold does not start ONNX again.
+    does_not_own:
+      - Blocking the inference path
+      - Mutating prediction arrays
+    depends_on: [A3, D3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: D2
+    workstream: products
+    role: platform
+    name: Visualization
+    purpose: Render by variable / product type. vil-frames is one renderer, not the viz layer.
+    do:
+      - Registry keyed by variable/product.
+      - Frame PNGs and contact sheet written under the run dir.
+    done_when: A new variable can register a renderer without editing SEVIR.
+    does_not_own:
+      - Data decoding
+    depends_on: [A3, D3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: D3
+    workstream: products
+    role: platform
+    name: Artifacts
+    purpose: Standard result directory. Failed runs remain inspectable.
+    do:
+      - metadata.json, prediction.npy, metrics.json, visualization paths.
+      - Write a failed metadata.json when execution dies after the run dir exists.
+    done_when: A failed run is still openable in the UI.
+    does_not_own:
+      - Writing back into model or data packages
+    depends_on: [A3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: E1
+    workstream: runtime
+    role: platform
+    name: Control service
+    purpose: Discover packages, run Matcher, one active run, SSE.
+    do:
+      - Catalog scan of datas/ and models/.
+      - Start/stop the runner child. Stream NIB_PROGRESS.
+    done_when: The UI never imports an adapter; only this service does process control.
+    does_not_own:
+      - Inference itself
+    depends_on: [A2, B1, C1, E2]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: E2
+    workstream: runtime
+    role: platform
+    name: Runner
+    purpose: One process per run. Orchestrates implementations through the interfaces.
+    do:
+      - Load one data implementation + N model implementations.
+      - Emit NIB_PROGRESS. Hand arrays to D1/D2/D3.
+    done_when: Frame truncation and normalisation never happen in this process except inside a model adapter.
+    does_not_own:
+      - Interpreting sample_id
+      - Truncating frames
+    depends_on: [A2, B1, C1, D1, D2, D3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: E3
+    workstream: runtime
+    role: platform
+    name: Workflow config
+    purpose: YAML v2 — data id, ordered model ids, init time, forecast horizon.
+    do:
+      - Strict parse. Reject unknown keys.
+    done_when: A hand-written YAML round-trips and starts a run.
+    does_not_own:
+      - A scheduler
+    depends_on: [A3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: E4
+    workstream: runtime
+    role: platform
+    name: Web UI
+    purpose: Select packages, run, compare, view frames.
+    do:
+      - Workflows / Runs / Compare against the control API.
+      - Hide model/data pairs Matcher rejects.
+    done_when: The browser never starts Docker and never imports adapters.
+    does_not_own:
+      - Docker lifecycle
+    depends_on: [E1]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null
+
+  - id: E5
+    workstream: runtime
+    role: platform
+    name: Compose / launcher
+    purpose: Image, localhost port, read-only data mount, workspace volume.
+    do:
+      - compose.yaml, Dockerfile, start.command preflight.
+    done_when: A machine with Docker and NIB_DATA_ROOT can start the box.
+    does_not_own:
+      - A multi-profile hardware orchestrator
+    depends_on: [E1, B3]
+    status: exists
+    mvp: true
+    owner: null
+    reviewer: null
+    github_issue: null
+    notes: null

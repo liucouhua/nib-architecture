@@ -1,0 +1,23 @@
+id,name,role,workstream,status,owner,reviewer,github_issue,do,done_when,depends_on
+A1,Task profiles,interface,contracts,design,,,,"Write precip-nowcast.v1 (variable, layout, time, missing)",A data package can offer it without this owner decoding files,A3
+A2,Matcher,interface,contracts,design,,,,"offers ∩ requires, then shape/cadence/frames. Human-readable errors",Incompatible pairs never reach the runner,"A1 A3"
+A3,Shared contracts,interface,contracts,exists,,,,Types Protocol manifest parse. No IO,Implementations depend only on this package plus their own files,
+B1,Data adapter interface,interface,data,design,,,,"Protocol list/load/offers/close. Manifest schema. Fake-adapter tests",New dataset = new datas/PACKAGE_ID/ without editing B1,A3
+B3,Data catalog mount,platform,data,exists,,,,NIB_DATA_ROOT layout. Missing-path error before run,Several implementations coexist on one mount,
+B2,SEVIR VIL,implementation,data,exists,,,,datas/SEVIR implements B1. Offer precip-nowcast.v1,Matcher accepts SEVIR with current models,"B1 B3"
+B4,Local radar,implementation,data,planned,,,,datas/PACKAGE_ID for ODIM / national composite. Same job as SEVIR,Pairs through Matcher; B1 not edited,"B1 B3"
+B5,Satellite,implementation,data,planned,,,,datas/PACKAGE_ID implementing B1. Sat-to-radar stays in this package if needed,Offers are honest,"B1 B3"
+B6,Lightning,implementation,data,planned,,,,datas/PACKAGE_ID implementing B1,Loads and declares offers,"B1 B3"
+C1,Model adapter interface,interface,models,exists,,,,"Protocol predict(TaskSample). Manifest requires/input/output. Fake-model tests",New model = new models/PACKAGE_ID/ without editing C1,A3
+C2,WADEPre,implementation,models,exists,,,,Adapter + ONNX. Owns 6-to-5 frames and training-time norm,predict() matches contract,"C1"
+C3,NowcastNet,implementation,models,exists,,,,Adapter + artifact implementing C1,Same bar as C2,C1
+C4,SimVP,implementation,models,exists,,,,Adapter + artifact implementing C1,Same bar as C2,C1
+C5,exPreCast,implementation,models,exists,,,,Adapter + artifact implementing C1,Same bar as C2,C1
+D1,Evaluation,platform,products,exists,,,,Metrics from saved arrays. Thresholds change without rerunning inference,Changing CSI does not start ONNX,"A3 D3"
+D2,Visualization,platform,products,exists,,,,Registry by variable/product. vil-frames is one renderer,A new variable registers without editing SEVIR,"A3 D3"
+D3,Artifacts,platform,products,exists,,,,Standard result dir. Failed runs stay inspectable,Failed run opens in the UI,A3
+E1,Control service,platform,runtime,exists,,,,"Catalog scan, Matcher, one child run, SSE",UI never imports an adapter,"A2 B1 C1 E2"
+E2,Runner,platform,runtime,exists,,,,One process. Calls implementations through B1/C1. NIB_PROGRESS,Truncation/norm only inside a model adapter,"A2 B1 C1 D1 D2 D3"
+E3,Workflow config,platform,runtime,exists,,,,Strict YAML v2,Hand-written YAML starts a run,A3
+E4,Web UI,platform,runtime,exists,,,,"Select, run, compare. Hide Matcher-rejected pairs",Browser never starts Docker,E1
+E5,Compose / launcher,platform,runtime,exists,,,,"Image, port, read-only mount, workspace volume",Docker + NIB_DATA_ROOT starts the box,"E1 B3"

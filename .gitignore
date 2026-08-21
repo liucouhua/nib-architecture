@@ -1,0 +1,10 @@
+.DS_Store
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.pdf
+*.drawio.bkp
+.$*.drawio.bkp
+*.drawio.png
